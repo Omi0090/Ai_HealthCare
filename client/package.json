@@ -8,7 +8,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "render-check": "vite build --ssr scripts/render-entry.jsx --outDir .render-check --emptyOutDir && node scripts/render-check.mjs"
+    "render-check": "vite build --ssr scripts/render-entry.jsx --outDir .render-check --emptyOutDir && node scripts/render-check.mjs",
+    "mount-check": "vite build --ssr scripts/render-entry.jsx --outDir .render-check --emptyOutDir && node scripts/mount-check.mjs",
+    "login-check": "vite build --ssr scripts/render-entry.jsx --outDir .render-check --emptyOutDir && node scripts/login-check.mjs",
+    "check": "npm run build && npm run render-check && npm run mount-check && npm run login-check"
   },
   "dependencies": {
     "axios": "^1.7.9",

@@ -266,6 +266,27 @@ async function main() {
     return claim;
   });
 
+  // ---- Shapley explanations for every claim an investigator will open ------
+  // Without this the claim page shows "No explanation stored" for all 800+
+  // flagged claims, which is exactly where the demo looks. Explaining *all*
+  // 9,000 claims would be slow and pointless; flagged + high-risk is the set a
+  // human actually reads. Anything else is explained on demand.
+  const wantsExplanation = (c) => c.isFlagged || c.riskScore >= 55;
+  const explainIdx = finalClaims
+    .map((c, i) => (wantsExplanation(c) ? i : -1))
+    .filter((i) => i >= 0);
+
+  if (explainIdx.length) {
+    console.log(`[seed] generating Shapley explanations for ${explainIdx.length} flagged/high-risk claims...`);
+    const tExplain = Date.now();
+    const explanations = await ml.explainClaims(explainIdx.map((i) => finalClaims[i]));
+    explanations.forEach((ex, k) => {
+      if (ex) finalClaims[explainIdx[k]].explanation = ex;
+    });
+    const done = explanations.filter(Boolean).length;
+    console.log(`[seed] explained ${done}/${explainIdx.length} in ${((Date.now() - tExplain) / 1000).toFixed(1)}s`);
+  }
+
   // insert in chunks to keep memory sane
   for (let i = 0; i < finalClaims.length; i += 400) {
     await store.insert('claims', finalClaims.slice(i, i + 400));

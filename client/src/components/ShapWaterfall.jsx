@@ -9,17 +9,24 @@ import clsx from 'clsx';
  * "start at the population baseline, this feature pushed it up, that one pulled
  * it down, land on the final score".
  */
-export default function ShapWaterfall({ explanation, compact = false }) {
+export default function ShapWaterfall({ explanation, compact = false, loading = false }) {
+  // `loading` lets the parent say "computing…" instead of "nothing here"
   if (!explanation?.top_features?.length) {
     return (
       <p className="rounded-xl border border-dashed border-white/10 px-4 py-6 text-center text-xs text-slate-500">
-        No explanation stored for this claim. Use “Re-run AI analysis” to generate one.
+        {loading
+          ? 'Computing Shapley attribution for this claim…'
+          : 'No explanation available for this claim yet. Use “Re-run AI analysis” to generate one.'}
       </p>
     );
   }
 
   const feats = explanation.top_features;
   const base = Number(explanation.base_value ?? explanation.expected_logit ?? 0);
+  // Contributions from the features not shown in the top 12, lumped together so
+  // the rendered steps reconstruct claim_logit exactly instead of stopping short.
+  const other = Number(explanation.other_features_contribution ?? 0);
+  const otherCount = Number(explanation.other_feature_count ?? 0);
   const claimLogit = Number(explanation.claim_logit ?? 0);
   const totalAbs = feats.reduce((s, f) => s + Math.abs(f.contribution), 0) || 1;
 
@@ -30,6 +37,23 @@ export default function ShapWaterfall({ explanation, compact = false }) {
     running += f.contribution;
     return { ...f, from, to: running };
   });
+
+  // one final aggregate step for the long tail of small contributions
+  if (otherCount > 0 && Math.abs(other) > 0.005) {
+    const from = running;
+    running += other;
+    steps.push({
+      feature: '__other__',
+      label: `${otherCount} remaining feature${otherCount === 1 ? '' : 's'}`,
+      value: null,
+      contribution: other,
+      contribution_std: 0,
+      weight_pct: null,
+      from,
+      to: running,
+      aggregate: true,
+    });
+  }
 
   const lo = Math.min(base, running, ...steps.map((s) => Math.min(s.from, s.to)));
   const hi = Math.max(base, running, ...steps.map((s) => Math.max(s.from, s.to)));
@@ -76,7 +100,9 @@ export default function ShapWaterfall({ explanation, compact = false }) {
               <div className="min-w-0">
                 <p className="truncate text-[11px] font-medium text-slate-300">{s.label}</p>
                 <p className="font-mono text-[10px] text-slate-500">
-                  value {Number(s.value).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                  {s.aggregate
+                    ? 'combined small contributions'
+                    : `value ${Number(s.value).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`}
                 </p>
               </div>
 
@@ -94,7 +120,9 @@ export default function ShapWaterfall({ explanation, compact = false }) {
                 <span className={clsx('font-mono text-[11px] font-semibold', increasing ? 'text-danger-400' : 'text-brand-400')}>
                   {increasing ? '+' : ''}{s.contribution.toFixed(2)}
                 </span>
-                <p className="text-[9px] text-slate-500">{s.weight_pct?.toFixed(0)}% share</p>
+                <p className="text-[9px] text-slate-500">
+                  {s.aggregate ? 'remainder' : `${s.weight_pct?.toFixed(0)}% share`}
+                </p>
               </div>
             </div>
           );
@@ -111,7 +139,7 @@ export default function ShapWaterfall({ explanation, compact = false }) {
         <div>
           <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">This claim</p>
           <p className="font-mono text-sm font-semibold text-white">{(toProb(claimLogit) * 100).toFixed(1)}%</p>
-          <p className="text-[9px] text-slate-600">model output</p>
+          <p className="text-[9px] text-slate-600">model output · all {explanation.feature_count || 32} features</p>
         </div>
         <div>
           <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">Odds</p>

@@ -202,6 +202,12 @@ def shap_local_attribution(predict_fn, x_row: np.ndarray, background: np.ndarray
             "weight_pct": round(100 * abs(c) / (np.abs(phi).sum() or 1), 1),
             "direction": "increases_risk" if c > 0 else "decreases_risk",
         })
+    # The waterfall only renders the 12 largest contributions, so report what the
+    # remaining features contributed in total. Without this the displayed bars do
+    # not visibly add up to the final score, which undermines trust in the panel.
+    shown = set(int(i) for i in order)
+    other = float(sum(phi[i] for i in range(d) if i not in shown))
+
     return {
         "method": "monte_carlo_shapley",
         "space": "log_odds",
@@ -210,6 +216,10 @@ def shap_local_attribution(predict_fn, x_row: np.ndarray, background: np.ndarray
         "claim_logit": round(fx, 4),
         "expected_logit": round(f_base, 4),
         "stability": round(stability, 4),
+        "feature_count": int(d),
+        "explained_contribution": round(float(phi[order].sum()), 5),
+        "other_features_contribution": round(other, 5),
+        "other_feature_count": int(d - len(order)),
         "top_features": top,
     }
 

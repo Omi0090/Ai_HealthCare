@@ -28,6 +28,7 @@ export default function ClaimDetail() {
   const [busy, setBusy] = useState('');
   const [tab, setTab] = useState('explanation');
   const [note, setNote] = useState('');
+  const [explainState, setExplainState] = useState('');
 
   const load = () => {
     setLoading(true);
@@ -38,6 +39,21 @@ export default function ClaimDetail() {
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [id]);
+
+  // Claims below the flag threshold are not pre-explained at seed time (that
+  // would be 9,000 Shapley runs). Fetch the attribution on demand so the
+  // explanation panel is never an empty box.
+  useEffect(() => {
+    const claim = data?.claim;
+    if (!claim || claim.explanation || explainState === 'done' || explainState === 'loading') return;
+    setExplainState('loading');
+    api.get(`/claims/${id}/explain`)
+      .then((r) => {
+        setData((d) => (d ? { ...d, claim: { ...d.claim, explanation: r.data.explanation } } : d));
+        setExplainState('done');
+      })
+      .catch(() => setExplainState('done'));
+  }, [data?.claim, id, explainState]);
 
   const act = async (label, fn) => {
     setBusy(label);
@@ -220,7 +236,7 @@ export default function ClaimDetail() {
             subtitle="Monte-Carlo Shapley attribution in log-odds space — contributions are additive and sum exactly to the model output"
             action={<span className="chip border-info-500/25 bg-info-500/10 text-info-400">Explainable AI</span>}
           />
-          <ShapWaterfall explanation={claim.explanation} />
+          <ShapWaterfall explanation={claim.explanation} loading={explainState === 'loading'} />
           {claim.scoringSource === 'fallback-linear' && (
             <p className="mt-3 rounded-lg border border-warn-500/20 bg-warn-500/[.07] px-3 py-2 text-[11px] text-warn-400">
               Scored by the offline linear fallback — the Python inference service was unreachable. Contributions are the

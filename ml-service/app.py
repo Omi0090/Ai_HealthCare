@@ -305,7 +305,20 @@ def predict(claim: ClaimIn) -> Dict[str, Any]:
 @app.post("/predict-batch")
 def predict_batch(payload: BatchIn) -> BatchOut:
     df = pd.DataFrame([c.model_dump() for c in payload.claims])
-    return BatchOut(results=score_frame(df, explain=False), count=len(df))
+    return BatchOut(results=score_frame(df, explain=payload.explain), count=len(df))
+
+
+@app.post("/explain-batch")
+def explain_batch(payload: BatchIn) -> BatchOut:
+    """
+    Shapley explanations for many claims at once.
+
+    Seeding the demo ledger needs an explanation for every flagged claim, and
+    calling /explain 800 times would be needlessly slow; building the feature
+    frame and the ensemble prediction once per chunk is far cheaper.
+    """
+    df = pd.DataFrame([c.model_dump() for c in payload.claims])
+    return BatchOut(results=score_frame(df, explain=True), count=len(df))
 
 
 @app.post("/explain")

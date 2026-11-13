@@ -49,8 +49,16 @@ Age ~ N(42, 17) truncated to [1, 92]; chronic conditions ~ Poisson depending on 
 premium by plan type.
 
 ### Claims (9,000)
-Dates span roughly June 2024 – April 2025. Claim type is drawn first, then refined by specialty
-(a Pharmacy provider bills pharmacy claims 75% of the time, etc.).
+Service dates span **2025-06-01 → 2026-03-27** (6329 claims in 2025, 2671 in 2026), with submission
+dates falling 0–45 days after service. The generator derives the date window from `base_date` and its
+seed, so regenerating with the same seed reproduces the same calendar exactly.
+
+Claim IDs are derived from the **service date's** year, not `base_date`'s, so a claim submitted in
+January 2026 for a December 2025 service is `CLM-2025-*`. (Using `base_date.year` produced IDs whose
+year contradicted the claim's own date, and silently shifted every downstream case number.)
+
+Claim type is drawn first, then refined by specialty (a Pharmacy provider bills pharmacy claims 75%
+of the time, etc.).
 
 ## 3. The fraud archetypes
 

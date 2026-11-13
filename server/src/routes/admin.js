@@ -14,8 +14,13 @@ router.get('/system', authenticate, asyncHandler(async (req, res) => {
   for (const c of ['users', 'claims', 'providers', 'members', 'cases', 'auditlogs']) {
     counts[c] = await store.count(c, {});
   }
-  // Full model report so the AI Model screen renders without a second call
-  const modelReport = await ml.getModelInfo();
+  // Full model report so the AI Model screen renders without a second call.
+  // /model-info intentionally omits permutation importances (they are a separate,
+  // slower computation), so fetch them explicitly rather than showing null.
+  const [modelReport, importance] = await Promise.all([
+    ml.getModelInfo(),
+    ml.getFeatureImportance(),
+  ]);
   res.json({
     database: { kind: store.kind, counts },
     ml: { ...status, url: ml.getStatus().url, fallbackAvailable: ml.getStatus().fallbackAvailable },
@@ -29,11 +34,14 @@ router.get('/system', authenticate, asyncHandler(async (req, res) => {
       generated_at: modelReport.generated_at,
       offline: Boolean(modelReport.offline),
     },
-    featureImportance: modelReport.feature_importance || modelReport.featureImportance || null,
+    featureImportance: importance.length ? importance : (modelReport.feature_importance || null),
     operatingPoints: modelReport.operating_points || null,
     perArchetype: modelReport.per_archetype_detection || null,
+    // The *deployed* operating constants. These are not the per-model training
+    // scores above: the API fuses model + rules + anomaly, then escalates at
+    // FLAG_THRESHOLD, and the decisive-rule floors can override both.
     fusionWeights: { model: 0.6, rules: 0.3, anomaly: 0.1 },
-    flagThreshold: Number(process.env.FLAG_THRESHOLD || 0.55),
+    flagThreshold: Number(process.env.FLAG_THRESHOLD || 0.62),
     node: process.version,
     uptimeSeconds: Math.round(process.uptime()),
     memoryMb: Math.round(process.memoryUsage().rss / 1048576),

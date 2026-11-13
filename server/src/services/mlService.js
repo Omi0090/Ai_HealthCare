@@ -22,6 +22,9 @@ const { FEATURES, FEATURE_LABELS, buildFeatures, toMlPayload, riskLevel } = requ
 
 const ML_URL = (process.env.ML_SERVICE_URL || 'http://localhost:8000').replace(/\/$/, '');
 const TIMEOUT_MS = Number(process.env.ML_TIMEOUT_MS || 20000);
+// Shapley attribution is ~300 forward passes per claim, so a batch of 200 takes
+// noticeably longer than a plain prediction.
+const ML_EXPLAIN_TIMEOUT_MS = Number(process.env.ML_EXPLAIN_TIMEOUT_MS || 120000);
 
 let linearModel = null;
 let mlStatus = { reachable: false, lastCheck: null, models: [], error: null, champion: null };
@@ -59,14 +62,14 @@ async function withTimeout(promise, ms, label = 'request') {
   }
 }
 
-async function callMl(endpoint, body, method = 'POST') {
+async function callMl(endpoint, body, method = 'POST', timeoutMs = TIMEOUT_MS) {
   const res = await withTimeout(
     fetch(`${ML_URL}${endpoint}`, {
       method,
       headers: { 'content-type': 'application/json' },
       body: method === 'GET' ? undefined : JSON.stringify(body),
     }),
-    TIMEOUT_MS,
+    timeoutMs,
     `ML ${endpoint}`
   );
   if (!res.ok) throw new Error(`ML ${endpoint} responded ${res.status}`);
@@ -236,6 +239,33 @@ async function scoreClaims(claims, { explain = false } = {}) {
   return out;
 }
 
+/**
+ * Batch Shapley explanations. Used at seed time so every flagged claim in the
+ * demo ledger opens with a ready-made explanation instead of an empty panel.
+ * Falls back to the offline linear attribution per claim when Python is down.
+ */
+async function explainClaims(claims, { chunkSize = 200 } = {}) {
+  if (!claims.length) return [];
+  const out = [];
+  for (let i = 0; i < claims.length; i += chunkSize) {
+    const chunk = claims.slice(i, i + chunkSize);
+    try {
+      const res = await callMl('/explain-batch', {
+        claims: chunk.map((c) => toMlPayload(c)),
+        explain: true,
+      }, 'POST', ML_EXPLAIN_TIMEOUT_MS);
+      mlStatus.reachable = true;
+      mlStatus.error = null;
+      res.results.forEach((r) => out.push(r.explanation || null));
+    } catch (err) {
+      mlStatus.reachable = false;
+      mlStatus.error = err.message;
+      chunk.forEach((c) => out.push(scoreLocally(c).explanation || null));
+    }
+  }
+  return out;
+}
+
 async function explainClaim(claim) {
   try {
     return await callMl('/explain', { ...toMlPayload(claim), explain: true });
@@ -258,6 +288,23 @@ async function getModelInfo() {
   }
 }
 
+/** Global permutation feature importances, falling back to the trained metrics file. */
+async function getFeatureImportance() {
+  try {
+    const res = await callMl('/feature-importance', null, 'GET');
+    return Array.isArray(res.importance) ? res.importance : [];
+  } catch (err) {
+    const metricsPath = path.join(__dirname, '..', '..', '..', 'ml-service', 'models', 'metrics.json');
+    try {
+      if (fs.existsSync(metricsPath)) {
+        const m = JSON.parse(fs.readFileSync(metricsPath, 'utf8'));
+        return Array.isArray(m.feature_importance) ? m.feature_importance : [];
+      }
+    } catch { /* ignore */ }
+    return [];
+  }
+}
+
 async function getRules() {
   try {
     return await callMl('/rules', null, 'GET');
@@ -267,6 +314,6 @@ async function getRules() {
 }
 
 module.exports = {
-  checkHealth, getStatus, scoreClaim, scoreClaims, explainClaim,
-  getModelInfo, getRules, scoreLocally, FEATURES,
+  checkHealth, getStatus, scoreClaim, scoreClaims, explainClaim, explainClaims,
+  getModelInfo, getFeatureImportance, getRules, scoreLocally, FEATURES,
 };

@@ -204,3 +204,60 @@ test('viewer role cannot mutate claims', async () => {
   await api.post('/api/claims')
     .set('Authorization', `Bearer ${relog.body.token}`).send(full).expect(403);
 });
+
+/* ------------------------------------------------------------------ *
+ * Explanations
+ *
+ * The claim page's default tab is the Shapley waterfall. A flagged claim
+ * without a stored explanation renders an empty panel, which is exactly the
+ * bug this guards against: seeding must explain the claims an investigator
+ * opens, and anything else must be explainable on demand.
+ * ------------------------------------------------------------------ */
+
+test('flagged claims carry a stored Shapley explanation', async () => {
+  const res = await api.get('/api/claims?flagged=true&limit=5')
+    .set('Authorization', `Bearer ${token}`).expect(200);
+
+  assert.ok(res.body.claims.length > 0, 'expected flagged claims in the ledger');
+  for (const c of res.body.claims) {
+    assert.ok(c.explanation, `claim ${c.claimId} has no explanation`);
+    assert.ok(Array.isArray(c.explanation.top_features) && c.explanation.top_features.length > 0);
+    assert.ok(Number.isFinite(c.explanation.base_value));
+  }
+});
+
+test('flagged claims in aggregate are all explained', async () => {
+  const res = await api.get('/api/claims?flagged=true&limit=200&sort=riskScore&order=desc')
+    .set('Authorization', `Bearer ${token}`).expect(200);
+  const missing = res.body.claims.filter((c) => !c.explanation).map((c) => c.claimId);
+  assert.deepEqual(missing, [], `unexplained flagged claims: ${missing.slice(0, 5).join(', ')}`);
+});
+
+test('GET /:id/explain returns an additive attribution for any claim', async () => {
+  // pick a *cleared* claim - these are deliberately not pre-explained at seed time
+  const cleared = await api.get('/api/claims?flagged=false&limit=1')
+    .set('Authorization', `Bearer ${token}`).expect(200);
+  const target = cleared.body.claims[0];
+  assert.ok(target, 'expected at least one cleared claim');
+
+  const res = await api.get(`/api/claims/${target.claimId}/explain`)
+    .set('Authorization', `Bearer ${token}`).expect(200);
+
+  const e = res.body.explanation;
+  assert.ok(e && Array.isArray(e.top_features) && e.top_features.length > 0);
+
+  // The efficiency property of Shapley values: every contribution, including the
+  // tail lumped into `other_features_contribution`, must reconstruct the score.
+  const shown = e.top_features.reduce((a, f) => a + f.contribution, 0);
+  const total = shown + (e.other_features_contribution || 0);
+  const reconstructed = e.base_value + total;
+  assert.ok(Math.abs(reconstructed - e.claim_logit) < 0.01,
+    `attributions do not reconstruct the score: ${e.base_value} + ${total} != ${e.claim_logit}`);
+  assert.ok(e.top_features.length + e.other_feature_count === e.feature_count,
+    'shown + leftover features must cover the whole feature vector');
+});
+
+test('explanation endpoint 404s for an unknown claim', async () => {
+  await api.get('/api/claims/CLM-0000-000000/explain')
+    .set('Authorization', `Bearer ${token}`).expect(404);
+});

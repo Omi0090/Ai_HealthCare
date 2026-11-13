@@ -20,7 +20,12 @@ api.interceptors.response.use(
   (res) => res,
   (error) => {
     const status = error.response?.status;
-    if (status === 401 && !window.location.pathname.startsWith('/login')) {
+    // A 401 on the sign-in endpoints means "wrong credentials", not "session
+    // expired" — redirecting there would reload the page and wipe what the user
+    // just typed, destroying the error message we are about to show them.
+    const url = error.config?.url || '';
+    const isAuthAttempt = url.includes('/auth/login') || url.includes('/auth/register');
+    if (status === 401 && !isAuthAttempt && !window.location.pathname.startsWith('/login')) {
       localStorage.removeItem('medguard.token');
       localStorage.removeItem('medguard.user');
       window.location.href = '/login';

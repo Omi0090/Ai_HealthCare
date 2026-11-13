@@ -66,13 +66,17 @@ workflow fields (`status`, `assignedTo`, `notes[]`) and `groundTruth{}` (demo la
 Full detail: `{ claim, features (32), provider, member, ruleEvaluation, relatedClaims, case, narrative }`.
 
 ### `GET /claims/:id/explain`
-Recomputes the Shapley attribution live:
+Recomputes the Shapley attribution live. Flagged and high-risk claims already carry a stored
+`explanation` from seeding, so this endpoint exists for the long tail — the claim page calls it
+automatically when a claim has no stored attribution.
 ```json
 {
   "claimId": "CLM-2025-003405",
   "explanation": {
     "method": "monte_carlo_shapley", "space": "log_odds", "permutations": 300,
-    "base_value": -3.70, "claim_logit": 12.75, "stability": 0.47,
+    "base_value": -3.70, "claim_logit": 12.75, "expected_logit": -3.70, "stability": 0.47,
+    "feature_count": 32, "explained_contribution": 15.31,
+    "other_features_contribution": 1.14, "other_feature_count": 20,
     "top_features": [
       { "feature": "distance_member_provider_km", "label": "Member-provider distance",
         "value": 420, "contribution": 4.80, "contribution_std": 2.45,
@@ -82,6 +86,9 @@ Recomputes the Shapley attribution live:
   "features": { ... }
 }
 ```
+
+`base_value + sum(top_features[].contribution) + other_features_contribution == claim_logit`
+exactly (Shapley efficiency), which is what the UI waterfall displays and what the API test asserts.
 
 ### `POST /claims` — admin, investigator, analyst
 Submits and scores a claim, persisting it.
@@ -160,6 +167,7 @@ Re-runs the ensemble and rule engine on a stored claim; updates its risk fields.
 | `POST /predict` | score one claim (`explain: true` includes Shapley) |
 | `POST /predict-batch` | `{ claims: [...], explain }` — up to 500 per call |
 | `POST /explain` | attribution only |
+| `POST /explain-batch` | `{ claims: [...] }` — batch attribution, used at seed time |
 | `POST /score-provider` | provider-level composite risk from a claim list |
 
 Interactive docs: **http://localhost:8000/docs**

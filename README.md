@@ -223,7 +223,13 @@ cd server      && npm test                       # 25 tests: API integration + d
 cd ml-service  && python tests/test_pipeline.py  # 8 ML pipeline tests
 cd client      && npm run build                  # production build check
 cd client      && npm run render-check           # renders all 14 routes headless
+cd client      && npm run mount-check             # mounts all pages and asserts real data
 ```
+
+`render-check` proves every route renders; `mount-check` goes further and mounts each page in a
+real jsdom DOM so `useEffect` fires and the page actually fetches from the API, then asserts it left
+its loading state and displays expected content. That is the difference between "the JSX is valid"
+and "the screen works after you sign in".
 
 The API tests spin up the JSON store in a temp file, so they need **no** MongoDB and no network.
 
