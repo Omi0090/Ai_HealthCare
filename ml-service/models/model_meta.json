@@ -1,0 +1,56 @@
+{
+ "features": [
+  "amount_billed",
+  "approved_ratio",
+  "billed_vs_peer_ratio",
+  "amount_zscore_specialty",
+  "procedure_avg_cost_ratio",
+  "units_claimed",
+  "service_days",
+  "nights_in_hospital",
+  "los_expected_ratio",
+  "num_procedures",
+  "prior_claims_30d_member",
+  "member_claim_frequency_12m",
+  "provider_claims_30d",
+  "same_day_multiple_claims",
+  "duplicate_similarity",
+  "diag_proc_match",
+  "age_service_mismatch",
+  "diagnosis_severity_score",
+  "submission_lag_days",
+  "is_weekend_submission",
+  "provider_specialty_risk",
+  "provider_license_age_years",
+  "provider_fraud_history",
+  "provider_network_status",
+  "distance_member_provider_km",
+  "member_age",
+  "member_chronic_conditions",
+  "policy_age_months",
+  "premium_to_billed_ratio",
+  "claim_type_risk",
+  "is_emergency",
+  "pharmacy_qty_ratio"
+ ],
+ "trained_at": "2026-11-13T09:39:16.794014+00:00",
+ "champion": "gradient_boosting",
+ "thresholds": {
+  "logistic_regression": 0.8033,
+  "random_forest": 0.4527,
+  "gradient_boosting": 0.4078,
+  "isolation_forest": 0.6661,
+  "hybrid_ensemble": 0.4884
+ },
+ "fusion_weights": {
+  "champion": 0.75,
+  "secondary": 0.15,
+  "anomaly": 0.1,
+  "champion_name": "gradient_boosting",
+  "secondary_name": "logistic_regression"
+ },
+ "anomaly_calibration": {
+  "low": 0.380967,
+  "high": 0.547754
+ }
+}
